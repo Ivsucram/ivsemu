@@ -1,1 +1,4 @@
 /target
+Cargo.lock
+
+/src/SDL2.dll

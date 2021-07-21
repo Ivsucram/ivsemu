@@ -6,3 +6,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# crossterm = "0.19"
+# tui = { version = "0.15", default-features = false, features = ['crossterm'] }
+# druid = "0.7.0"
+sdl2 = "0.34.5" 
+rand = "0.8.4"
