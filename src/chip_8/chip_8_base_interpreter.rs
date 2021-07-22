@@ -10,7 +10,10 @@ const DISPLAY_HEIGHT: usize = 32;
 const DISPLAY_SCALE: u32 = 10;
 
 pub struct ProgramCounter(usize);
-pub struct Registers([u8; 0x10]);
+pub struct Registers{
+    x_0: u8, x_1: u8, x_2: u8, x_3: u8, x_4: u8, x_5: u8, x_6: u8, x_7: u8,
+    x_8: u8, x_9: u8, x_a: u8, x_b: u8, x_c: u8, x_d: u8, x_e: u8, x_f: u8
+}
 pub struct Ram([u8; 4 * 1024]);
 pub struct DisplayBuffer([[bool; DISPLAY_HEIGHT]; DISPLAY_WIDTH]);
 
@@ -21,16 +24,21 @@ pub struct Timer{
 }
 
 pub struct Keypad { 
-    keys: [bool; 0x10], 
-    // layout: String 
+    key_status: [bool; 0x10],
+    keys: std::collections::HashMap<sdl2::keyboard::Keycode, usize>
 }
 
 pub struct OpCodes { 
     opcode: u16, 
-    nible_1: u8, 
-    nible_2: u8, 
-    nible_3: u8, 
-    nible_4: u8 
+    n1: u8, 
+    n2: u8, 
+    n3: u8, 
+    n4: u8,
+    x: usize,
+    y: usize,
+    n: u8,
+    nn: u8,
+    nnn: usize
 }
 
 impl ProgramCounter {
@@ -60,16 +68,31 @@ impl ProgramCounter {
 impl Registers {
     fn init() -> Registers {
         Registers {
-            0: [0x0; 16]
+            x_0: 0, x_1: 0, x_2: 0, x_3: 0, x_4: 0, x_5: 0, x_6: 0, x_7: 0,
+            x_8: 0, x_9: 0, x_a: 0, x_b: 0, x_c: 0, x_d: 0, x_e: 0, x_f: 0
         }
     }
 
     fn get(&self, register: usize) -> u8 {
-        self.0[register]
+        assert!(register <= 0xF);
+        match register {
+            0x0 => self.x_0, 0x1 => self.x_1, 0x2 => self.x_2, 0x3 => self.x_3,
+            0x4 => self.x_4, 0x5 => self.x_5, 0x6 => self.x_6, 0x7 => self.x_7,
+            0x8 => self.x_8, 0x9 => self.x_9, 0xA => self.x_a, 0xB => self.x_b,
+            0xC => self.x_c, 0xD => self.x_d, 0xE => self.x_e, 0xF => self.x_f,
+            _ => 0
+        }
     }
 
     fn set(&mut self, register: usize, value: u8) {
-        self.0[register] = value;
+        assert!(register <= 0xF);
+        match register {
+            0x0 => self.x_0 = value, 0x1 => self.x_1 = value, 0x2 => self.x_2 = value, 0x3 => self.x_3 = value,
+            0x4 => self.x_4 = value, 0x5 => self.x_5 = value, 0x6 => self.x_6 = value, 0x7 => self.x_7 = value,
+            0x8 => self.x_8 = value, 0x9 => self.x_9 = value, 0xA => self.x_a = value, 0xB => self.x_b = value,
+            0xC => self.x_c = value, 0xD => self.x_d = value, 0xE => self.x_e = value, 0xF => self.x_f = value,
+            _ => {}
+        }
     }
 }
 
@@ -165,61 +188,53 @@ impl Timer {
 impl Keypad {
     fn init() -> Keypad {
         Keypad {
-            keys: [false; 0x10],
-            // layout: String::from("123C456D789EA0BF")
+            key_status: [false; 0x10],
+            keys: [(sdl2::keyboard::Keycode::Num1, 0x1),
+                   (sdl2::keyboard::Keycode::Num2, 0x2),
+                   (sdl2::keyboard::Keycode::Num3, 0x3),
+                   (sdl2::keyboard::Keycode::Num4, 0xC),
+                   (sdl2::keyboard::Keycode::Q, 0x4),
+                   (sdl2::keyboard::Keycode::W, 0x5),
+                   (sdl2::keyboard::Keycode::E, 0x6),
+                   (sdl2::keyboard::Keycode::R, 0xD),
+                   (sdl2::keyboard::Keycode::A, 0x7),
+                   (sdl2::keyboard::Keycode::S, 0x8),
+                   (sdl2::keyboard::Keycode::D, 0x9),
+                   (sdl2::keyboard::Keycode::F, 0xE),
+                   (sdl2::keyboard::Keycode::Z, 0xA),
+                   (sdl2::keyboard::Keycode::X, 0x0),
+                   (sdl2::keyboard::Keycode::C, 0xB),
+                   (sdl2::keyboard::Keycode::V, 0xF)
+                  ].iter().cloned().collect()
         }
     }
 
     fn compute_keycode(&self, keycode: sdl2::keyboard::Keycode) -> Option<usize> {
-        match keycode {
-            sdl2::keyboard::Keycode::Num1 => Some(0x1),
-            sdl2::keyboard::Keycode::Num2 => Some(0x2),
-            sdl2::keyboard::Keycode::Num3 => Some(0x3),
-            sdl2::keyboard::Keycode::Num4 => Some(0xC),
-
-            sdl2::keyboard::Keycode::Q => Some(0x4),
-            sdl2::keyboard::Keycode::W => Some(0x5),
-            sdl2::keyboard::Keycode::E => Some(0x6),
-            sdl2::keyboard::Keycode::R => Some(0xD),
-
-            sdl2::keyboard::Keycode::A => Some(0x7),
-            sdl2::keyboard::Keycode::S => Some(0x8),
-            sdl2::keyboard::Keycode::D => Some(0x9),
-            sdl2::keyboard::Keycode::F => Some(0xE),
-
-            sdl2::keyboard::Keycode::Z => Some(0xA),
-            sdl2::keyboard::Keycode::X => Some(0x0),
-            sdl2::keyboard::Keycode::C => Some(0xB),
-            sdl2::keyboard::Keycode::V => Some(0xF),
-
-            _ => Option::None,
+        match self.keys.get(&keycode) {
+            Some(chip8_key) => Some(*chip8_key),
+            None => None
         }
     }
-
-    // fn set_layout(&mut self, layout: &str) {
-    //     assert_eq!(layout.len(), self.layout.len());
-    //     self.layout = layout.to_string();
-    // }
 
     fn get(&mut self, pos: usize) -> bool {
-        self.keys[pos]
+        self.key_status[pos]
     }
 
-    fn being_pressed(&self) -> u8 {
+    fn being_pressed(&self) -> Option<u8> {
         for key in 0x0..0x10 {
-            if self.keys[key] {
-                return key as u8
+            if self.key_status[key] {
+                return Some(key as u8)
             }
         }
-        return 0x10
+        None
     }
 
     fn press(&mut self, key: usize) {
-        self.keys[key] = true;
+        self.key_status[key] = true;
     }
 
     fn release(&mut self, key: usize) {
-        self.keys[key] = false;
+        self.key_status[key] = false;
     }
 }
 
@@ -237,34 +252,26 @@ impl DisplayBuffer {
 
 impl OpCodes {
     fn init(opcode: u16) -> OpCodes {
+        let n1  = (opcode & 0xF000) >> 12;
+        let n2  = (opcode & 0xF00) >> 8;
+        let n3  = (opcode & 0xF0) >> 4;
+        let n4  =  opcode & 0xF;
+        let nn  =  opcode & 0xFF;
+        let nnn =  opcode & 0xFFF;
+
         OpCodes {
             opcode: opcode,
-            nible_1: ((opcode & 0xF000) >> 12) as u8,
-            nible_2: ((opcode & 0x0F00) >> 8) as u8,
-            nible_3: ((opcode & 0x00F0) >> 4) as u8,
-            nible_4: (opcode & 0x000F) as u8
+            n1: n1 as u8,
+            n2: n2 as u8,
+            n3: n3 as u8,
+            n4: n4 as u8,
+            x: n2 as usize,
+            y: n3 as usize,
+            n: n4 as u8,
+            nn: nn as u8,
+            nnn: nnn as usize
         }
-    }
-
-    fn get_x(&self) -> usize {
-        self.nible_2 as usize
-    }
-
-    fn get_y(&self) -> usize {
-        self.nible_3 as usize
-    }
-
-    fn get_nnn(&self) -> u16 {
-        self.opcode & 0xFFF
-    }
-
-    fn get_nn(&self) -> u8 {
-        (self.opcode & 0xFF) as u8
-    }
-
-    fn get_n(&self) -> u8 {
-        (self.opcode & 0xF) as  u8
-    }
+    }    
 }
 
 struct CPU {
@@ -277,7 +284,10 @@ struct CPU {
     registers: Registers,
     ram: Ram,
     keypad: Keypad,
-    display_buffer: DisplayBuffer
+    display_buffer: DisplayBuffer,
+    opcode: OpCodes,
+
+    str_to_hex_map: std::collections::HashMap<char, Option<u8>>
 }
 
 impl CPU {
@@ -292,7 +302,81 @@ impl CPU {
             registers: Registers::init(),
             ram: Ram::init(),
             keypad: Keypad::init(),
-            display_buffer: DisplayBuffer::init()
+            display_buffer: DisplayBuffer::init(),
+            opcode: OpCodes::init(0000),
+
+            str_to_hex_map: [('0', Some(0x0)), ('1', Some(0x1)), ('2', Some(0x2)), ('3', Some(0x3)),
+                             ('4', Some(0x4)), ('5', Some(0x5)), ('6', Some(0x6)), ('7', Some(0x7)),
+                             ('8', Some(0x8)), ('9', Some(0x9)), ('A', Some(0xA)), ('B', Some(0xB)),
+                             ('C', Some(0xC)), ('D', Some(0xD)), ('E', Some(0xE)), ('F', Some(0xF)),
+                             ('?', None)].iter().cloned().collect()
+        }
+    }
+
+    fn fetch(&mut self) {
+        self.opcode = OpCodes::init(self.ram.read16(self.pc.get()));
+        self.pc.increase();
+    }
+
+    fn decode(&mut self) {
+        if self.decode_match("00E0") { op_00e0(self);
+        } else if self.decode_match("1???") { op_1nnn(self);
+        } else if self.decode_match("00EE") { op_00ee(self);
+        } else if self.decode_match("2???") { op_2nnn(self);
+        } else if self.decode_match("3???") { op_3xnn(self);
+        } else if self.decode_match("4???") { op_4xnn(self);
+        } else if self.decode_match("5??0") { op_5xy0(self);
+        } else if self.decode_match("9??0") { op_9xy0(self);
+        } else if self.decode_match("6???") { op_6xnn(self);
+        } else if self.decode_match("7???") { op_7xnn(self);
+        } else if self.decode_match("8??0") { op_8xy0(self);
+        } else if self.decode_match("8??1") { op_8xy1(self);
+        } else if self.decode_match("8??2") { op_8xy2(self);
+        } else if self.decode_match("8??3") { op_8xy3(self);
+        } else if self.decode_match("8??4") { op_8xy4(self);
+        } else if self.decode_match("8??5") { op_8xy5(self);
+        } else if self.decode_match("8??6") { op_8xy6(self);
+        } else if self.decode_match("8??7") { op_8xy7(self);
+        } else if self.decode_match("8??E") { op_8xye(self);
+        } else if self.decode_match("A???") { op_annn(self);
+        } else if self.decode_match("B???") { op_bnnn(self);
+        } else if self.decode_match("C???") { op_cxnn(self);
+        } else if self.decode_match("D???") { op_dxyn(self);
+        } else if self.decode_match("E?9E") { op_ex9e(self);
+        } else if self.decode_match("E?A1") { op_exa1(self);
+        } else if self.decode_match("F??7") { op_fx07(self);
+        } else if self.decode_match("F?15") { op_fx15(self);
+        } else if self.decode_match("F?18") { op_fx18(self);
+        } else if self.decode_match("F?1E") { op_fx1e(self);
+        } else if self.decode_match("F?0A") { op_fx0a(self);
+        } else if self.decode_match("F?29") { op_fx29(self);
+        } else if self.decode_match("F?33") { op_fx33(self);
+        } else if self.decode_match("F?55") { op_fx55(self);
+        } else if self.decode_match("F?65") { op_fx65(self);
+        } else {
+            println!{"Unknown instruction: {:04x}", self.opcode.opcode};
+        }
+    }
+
+    fn decode_match(&self, hex_code: &str) -> bool {
+        let mut res: bool = true;
+        for (i, c) in hex_code.chars().enumerate() {
+            match self.str_to_hex_map.get(&c) {
+                Some(Some(hex)) => res = res && self.compare_nibble(i, &hex),
+                Some(None) => res = res && true,
+                _ => res = res && false
+            }
+        }
+        res
+    }
+
+    fn compare_nibble(&self, pos: usize, nibble: &u8) -> bool{
+        match pos {
+            0 => *nibble == self.opcode.n1,
+            1 => *nibble == self.opcode.n2,
+            2 => *nibble == self.opcode.n3,
+            3 => *nibble == self.opcode.n4,
+            _ => false
         }
     }
 }
@@ -301,15 +385,23 @@ pub fn run() {
     let mut cpu = CPU::init();
     cpu.ram.init_fonts();
     // load_rom("src/chip_8/roms/ibm_logo.ch8", &mut cpu);
-    load_rom("src/chip_8/roms/BC_test.ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/BC_test.ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Keypad_Test_Hap_2006.ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Trip8 Demo (2008) [Revival Studios].ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Zero Demo [zeroZshadow, 2007].ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Particle Demo [zeroZshadow, 2008].ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Sierpinski [Sergey Naydenov, 2010].ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Chip8 emulator Logo [Garstyciuks].ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/Stars [Sergey Naydenov, 2010].ch8", &mut cpu);
     // load_rom("src/chip_8/roms/test_opcode.ch8", &mut cpu);
     // load_rom("src/chip_8/roms/HIDDEN.ch8", &mut cpu); // Good to test keyboard
-    // load_rom("src/chip_8/roms/CAVE.ch8", &mut cpu); // Good to test keyboard
+    load_rom("src/chip_8/roms/CAVE.ch8", &mut cpu); // Good to test keyboard
     // load_rom("src/chip_8/roms/TRON.ch8", &mut cpu); // Good to test keyboard
     // load_rom("src/chip_8/roms/PUZZLE.ch8", &mut cpu); // Good to test keyboard?
     // load_rom("src/chip_8/roms/TETRIS.ch8", &mut cpu); // Good to test keyboard? 
     // load_rom("src/chip_8/roms/delay_timer_test.ch8", &mut cpu);
     // load_rom("src/chip_8/roms/random_number_test.ch8", &mut cpu);
+    // load_rom("src/chip_8/roms/SNAKE.ch8", &mut cpu);
 
     let sdl_context = sdl2::init().unwrap();
     let mut display = crate::chip_8::display::Display::init(&sdl_context, DISPLAY_SCALE);
@@ -332,6 +424,10 @@ pub fn run() {
                     println!("Decreasing cpu clock from {} Hz to {} Hz", cpu.clock.clock_hz, cpu.clock.clock_hz - 10);
                     cpu.clock.clock_hz -= 10;
                 },
+                sdl2::event::Event::KeyDown { 
+                    keycode: Some(sdl2::keyboard::Keycode::Backspace), .. } => {
+                    cpu.pc.set(0x200);
+                },
                 sdl2::event::Event::KeyDown { keycode: Some(keycode), ..} => {
                     if let Some(key_index) = cpu.keypad.compute_keycode(keycode) {
                         cpu.keypad.press(key_index);
@@ -349,9 +445,9 @@ pub fn run() {
         cpu.delay_timer.tick();
         cpu.sound_timer.tick();
         if cpu.clock.tick() {
-            let opcode = OpCodes::init(fetch(&mut cpu));
-            decode(&opcode, &mut cpu);
-            if opcode.nible_1 == 0xD {
+            cpu.fetch();
+            cpu.decode();
+            if cpu.decode_match("D???") {
                 display.draw(&cpu.display_buffer.0)
             }
         }
@@ -366,104 +462,17 @@ fn load_rom(filename: &str, cpu: &mut CPU) {
     cpu.ram.load_rom(&buffer);
 }
 
-fn fetch(cpu: &mut CPU) -> u16 {
-    let opcode = cpu.ram.read16(cpu.pc.get());
-    cpu.pc.increase();
-    opcode
-}
-
-fn decode(opcode: &OpCodes, cpu: &mut CPU) {
-    if opcode.opcode == 0x00E0 {
-        op_00e0(cpu);
-    } else if opcode.nible_1 == 0x1 {
-        op1nnn(cpu, opcode.get_nnn() as usize);
-    } else if opcode.opcode == 0x00EE {
-        op00ee(cpu);
-    } else if opcode.nible_1 == 0x2 {
-        op2nnn(cpu, opcode.get_nnn() as usize);
-    } else if opcode.nible_1 == 0x3 {
-        op3xnn(cpu, opcode.get_x(), opcode.get_nn());
-    } else if opcode.nible_1 == 0x4 {
-        op4xnn(cpu, opcode.get_x(), opcode.get_nn());
-    } else if opcode.nible_1 == 0x5 {
-        op5xy0(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x9 {
-        op9xy0(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x6 {
-        op6xnn(cpu, opcode.get_x(), opcode.get_nn());
-    } else if opcode.nible_1 == 0x7 {
-        op7xnn(cpu, opcode.get_x(), opcode.get_nn());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x0 {
-        op8xy0(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x1 {
-        op8xy1(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x2 {
-        op8xy2(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x3 {
-        op8xy3(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x4 {
-        op8xy4(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x5 {
-        op8xy5(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x6 {
-        op8xy6(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0x7 {
-        op8xy7(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0x8 && opcode.nible_4 == 0xE {
-        op8xye(cpu, opcode.get_x(), opcode.get_y());
-    } else if opcode.nible_1 == 0xA {
-        opannn(cpu, opcode.get_nnn() as usize);
-    } else if opcode.nible_1 == 0xB {
-        opbnnn(cpu, opcode.get_nnn() as usize);
-    } else if opcode.nible_1 == 0xC {
-        opcxnn(cpu, opcode.get_x(), opcode.get_nn());
-    } else if opcode.nible_1 == 0xD {
-        opdxyn(cpu, opcode.get_x(), opcode.get_y(), opcode.get_n());
-    } else if opcode.nible_1 == 0xE && opcode.nible_3 == 0x9 && opcode.nible_4 == 0xE {
-        opex9e(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xE && opcode.nible_3 == 0x9 && opcode.nible_4 == 0xE {
-        opex9e(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xE && opcode.nible_3 == 0xA && opcode.nible_4 == 0x1 {
-        opexa1(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x0 && opcode.nible_4 == 0x7 {
-        opfx07(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x1 && opcode.nible_4 == 0x5 {
-        opfx15(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x1 && opcode.nible_4 == 0x8 {
-        opfx18(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x1 && opcode.nible_4 == 0xE {
-        opfx1e(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x0 && opcode.nible_4 == 0xA {
-        opfx0a(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x2 && opcode.nible_4 == 0x9 {
-        opfx29(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x3 && opcode.nible_4 == 0x3 {
-        opfx33(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x5 && opcode.nible_4 == 0x5 {
-        opfx55(cpu, opcode.get_x());
-    } else if opcode.nible_1 == 0xF && opcode.nible_3 == 0x6 && opcode.nible_4 == 0x5 {
-        opfx65(cpu, opcode.get_x());
-    } else {
-        println!{"Unknown instruction: {:04x}", opcode.opcode};
-    }
-}
-// fn execute() {}
-
 // fn op_0NNN() {}//ignore
 
-// CLS
-// Clear the display, turning all pixels off
 fn op_00e0(cpu: &mut CPU) {
     cpu.display_buffer.clear();
 }
 
-// JMP
-// Set PC to NNN, causing the program to jump to that memory location
-fn op1nnn(cpu: &mut CPU, value: usize) {
-    cpu.pc.set(value);
+fn op_1nnn(cpu: &mut CPU) {
+    cpu.pc.set(cpu.opcode.nnn);
 }
 
-fn op00ee(cpu: &mut CPU) {
+fn op_00ee(cpu: &mut CPU) {
     let value = cpu.stack.pop();
     match value {
         Some(value) => {
@@ -473,132 +482,120 @@ fn op00ee(cpu: &mut CPU) {
     }
 }
 
-fn op2nnn(cpu: &mut CPU, value: usize) {
+fn op_2nnn(cpu: &mut CPU) {
     cpu.stack.push(cpu.pc.get());
-    cpu.pc.set(value);
+    cpu.pc.set(cpu.opcode.nnn);
 }
 
-fn op3xnn(cpu: &mut CPU, register_x: usize, value: u8) {
-    if cpu.registers.get(register_x) == value {
+fn op_3xnn(cpu: &mut CPU) {
+    if cpu.registers.get(cpu.opcode.x) == cpu.opcode.nn {
         cpu.pc.increase();
     }
 }
 
-fn op4xnn(cpu: &mut CPU, register_x: usize, value: u8) {
-    if cpu.registers.get(register_x) != value {
+fn op_4xnn(cpu: &mut CPU) {
+    if cpu.registers.get(cpu.opcode.x) != cpu.opcode.nn {
         cpu.pc.increase();
     }
 }
 
-fn op5xy0(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    if cpu.registers.get(register_x) == cpu.registers.get(register_y) {
+fn op_5xy0(cpu: &mut CPU) {
+    if cpu.registers.get(cpu.opcode.x) == cpu.registers.get(cpu.opcode.y) {
         cpu.pc.increase();
     }
 }
 
-fn op9xy0(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    if cpu.registers.get(register_x) != cpu.registers.get(register_y) {
+fn op_9xy0(cpu: &mut CPU) {
+    if cpu.registers.get(cpu.opcode.x) != cpu.registers.get(cpu.opcode.y) {
         cpu.pc.increase();
     }
 }
 
-// SET
-// Set the register VX to the value NN
-fn op6xnn(cpu: &mut CPU, register: usize, value: u8) {
-    cpu.registers.set(register, value);
+fn op_6xnn(cpu: &mut CPU) {
+    cpu.registers.set(cpu.opcode.x, cpu.opcode.nn);
 }
 
-// ADD
-// Add the value NN to VX. VF is ignored
-fn op7xnn(cpu: &mut CPU, register: usize, value: u8) {
-    let nn = value as u16;
-    let vx = cpu.registers.get(register) as u16;
-    let value = (nn + vx) & 0xFF;
-    let value = value as u8;
-    cpu.registers.set(register, value);
+fn op_7xnn(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    cpu.registers.set(cpu.opcode.x, cpu.opcode.nn.wrapping_add(vx));
 }
 
-fn op8xy0(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    cpu.registers.set(register_x, cpu.registers.get(register_y));
+fn op_8xy0(cpu: &mut CPU) {
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vy);
 }
 
-fn op8xy1(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x);
-    let vy = cpu.registers.get(register_y);
-    cpu.registers.set(register_x, vx | vy);
+fn op_8xy1(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vx | vy);
 }
 
-fn op8xy2(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x);
-    let vy = cpu.registers.get(register_y);
-    cpu.registers.set(register_x, vx & vy);
+fn op_8xy2(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vx & vy);
 }
 
-fn op8xy3(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x);
-    let vy = cpu.registers.get(register_y);
-    cpu.registers.set(register_x, vx ^ vy);
+fn op_8xy3(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vx ^ vy);
 }
 
-fn op8xy4(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x) as u16;
-    let vy = cpu.registers.get(register_y) as u16;
-    let value = (vx + vy) & 0xFF;
-    cpu.registers.set(register_x, value as u8);
+fn op_8xy4(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vx.wrapping_add(vy));
 }
 
-fn op8xy5(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x);
-    let vy = cpu.registers.get(register_y);
-    cpu.registers.set(register_x, vx.wrapping_sub(vy));
-    cpu.registers.set(0xF, if vx > vy {1} else {0});
+fn op_8xy5(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vx.wrapping_sub(vy));
+    cpu.registers.x_f = if vx > vy {1} else {0};
 }
 
-fn op8xy6(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vy = cpu.registers.get(register_y);
-    let vx = cpu.registers.get(register_x);
-    cpu.registers.set(register_x, vy >> 1);
-    cpu.registers.set(0xF, vx & 0x1);
+fn op_8xy6(cpu: &mut CPU) {
+    let vy = cpu.registers.get(cpu.opcode.x);
+    let vx = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vy >> 1);
+    cpu.registers.x_f = vx & 0x1;
 }
 
-fn op8xy7(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vx = cpu.registers.get(register_x);
-    let vy = cpu.registers.get(register_y);
-    cpu.registers.set(register_x, vy.wrapping_sub(vx));
-    cpu.registers.set(0xF, if vy > vx {1} else {0});
+fn op_8xy7(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vy.wrapping_sub(vx));
+    cpu.registers.x_f = if vy > vx {1} else {0};
 }
 
-fn op8xye(cpu: &mut CPU, register_x: usize, register_y: usize) {
-    let vy = cpu.registers.get(register_y);
-    let vx = cpu.registers.get(register_x);
-    cpu.registers.set(register_x, vy << 1);
-    cpu.registers.set(0xF, (vx & 0x80) >> 7);
+fn op_8xye(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
+    let vy = cpu.registers.get(cpu.opcode.y);
+    cpu.registers.set(cpu.opcode.x, vy << 1);
+    cpu.registers.x_f = (vx & 0x80) >> 7;
     
 }
 
-// IND
-// Set index register I to the value NNN
-fn opannn(cpu: &mut CPU, value: usize) {
-    cpu.index_register = value;
+fn op_annn(cpu: &mut CPU) {
+    cpu.index_register = cpu.opcode.nnn;
 }
 
-fn opbnnn(cpu: &mut CPU, value: usize) {
-    let v0 = cpu.registers.get(0x0) as usize;
-    cpu.pc.set(value + v0);
+fn op_bnnn(cpu: &mut CPU) {
+    cpu.pc.set(cpu.opcode.nnn + cpu.registers.x_0 as usize);
 }
 
-fn opcxnn(cpu: &mut CPU, register_x: usize, value: u8) {
+fn op_cxnn(cpu: &mut CPU) {
     let mut rng = rand::thread_rng();
-    cpu.registers.set(register_x,rng.gen_range(0x0..0xFF) & value);
+    cpu.registers.set(cpu.opcode.x, rng.gen_range(0x0..0xFF) & cpu.opcode.nn);
 }
 
-// DIS
-// Display
-fn opdxyn(cpu: &mut CPU, register_x: usize, register_y: usize, value: u8) {
+fn op_dxyn(cpu: &mut CPU) {
     let mut vf: bool = false;
-    let value = value as usize;
-    let ori_x = cpu.registers.get(register_x) as usize % DISPLAY_WIDTH;
-    let ori_y = cpu.registers.get(register_y) as usize % DISPLAY_HEIGHT;
+    let value = cpu.opcode.n as usize;
+    let ori_x = cpu.registers.get(cpu.opcode.x) as usize % DISPLAY_WIDTH;
+    let ori_y = cpu.registers.get(cpu.opcode.y) as usize % DISPLAY_HEIGHT;
 
     for row in 0..value {
         let y = ori_y + row;
@@ -619,69 +616,66 @@ fn opdxyn(cpu: &mut CPU, register_x: usize, register_y: usize, value: u8) {
             vf = (memory_pixel && display_pixel) || vf;
         }
     }
-    cpu.registers.set(0xF, if vf {1} else {0});
+    cpu.registers.x_f = if vf {1} else {0};
 }
 
-fn opex9e(cpu: &mut CPU, register_x: usize) {
-    if cpu.keypad.get(cpu.registers.get(register_x) as usize) {
+fn op_ex9e(cpu: &mut CPU) {
+    if cpu.keypad.get(cpu.registers.get(cpu.opcode.x) as usize) {
         cpu.pc.increase();
     }
 }
 
-fn opexa1(cpu: &mut CPU, register_x: usize) {
-    if !cpu.keypad.get(cpu.registers.get(register_x) as usize) {
+fn op_exa1(cpu: &mut CPU) {
+    if !cpu.keypad.get(cpu.registers.get(cpu.opcode.x) as usize) {
         cpu.pc.increase();
     }
 }
 
-fn opfx07(cpu: &mut CPU, register_x: usize) {
-    cpu.registers.set(register_x, cpu.delay_timer.tick);
+fn op_fx07(cpu: &mut CPU) {
+    cpu.registers.set(cpu.opcode.x, cpu.delay_timer.tick);
 }
 
-fn opfx15(cpu: &mut CPU, register_x: usize) {
-    cpu.delay_timer.tick = cpu.registers.get(register_x);
+fn op_fx15(cpu: &mut CPU) {
+    cpu.delay_timer.tick = cpu.registers.get(cpu.opcode.x);
 }
 
-fn opfx18(cpu: &mut CPU, register_x: usize) {
-    cpu.sound_timer.tick = cpu.registers.get(register_x);
+fn op_fx18(cpu: &mut CPU) {
+    cpu.sound_timer.tick = cpu.registers.get(cpu.opcode.x);
 }
 
-fn opfx1e(cpu: &mut CPU, register_x: usize) {
-    cpu.index_register += cpu.registers.get(register_x) as usize;
+fn op_fx1e(cpu: &mut CPU) {
+    cpu.index_register += cpu.registers.get(cpu.opcode.x) as usize;
 }
 
-fn opfx0a(cpu: &mut CPU, register_x: usize) {
-    if cpu.keypad.being_pressed() == 0x10 {
-        cpu.pc.decrement();
-    } else {
-        cpu.registers.set(register_x, cpu.keypad.being_pressed());
+fn op_fx0a(cpu: &mut CPU) {
+    match cpu.keypad.being_pressed() {
+        Some(key) => { cpu.registers.set(cpu.opcode.x, key); },
+        _ => { cpu.pc.decrement(); }
     }
 }
 
-fn opfx29(cpu: &mut CPU, register_x: usize) {
-    let char = (cpu.registers.get(register_x) & 0xF) as usize;
+fn op_fx29(cpu: &mut CPU) {
+    let char = (cpu.registers.get(cpu.opcode.x) & 0xF) as usize;
     cpu.index_register = 0x50 + char * 5;
 }
 
-fn opfx33(cpu: &mut CPU, register_x: usize) {
-    let vx = cpu.registers.get(register_x);
+fn op_fx33(cpu: &mut CPU) {
+    let vx = cpu.registers.get(cpu.opcode.x);
     cpu.ram.write8(cpu.index_register, vx / 100);
     cpu.ram.write8(cpu.index_register + 1, vx / 10 % 10);
     cpu.ram.write8(cpu.index_register + 2, vx % 10);
 }
 
-fn opfx55(cpu: &mut CPU, register_x: usize) {
+fn op_fx55(cpu: &mut CPU) {
     let i = cpu.index_register;
-    for regs in 0x0..(register_x + 1) {
+    for regs in 0x0..(cpu.opcode.x + 1) {
         cpu.ram.write8(i + regs, cpu.registers.get(regs));
     }
-    // cpu.index_register += register_x + 1;
 }
 
-fn opfx65(cpu: &mut CPU, register_x: usize) {
+fn op_fx65(cpu: &mut CPU) {
     let i = cpu.index_register;
-    for regs in 0x0..(register_x + 1) {
+    for regs in 0x0..(cpu.opcode.x + 1) {
         cpu.registers.set(regs, cpu.ram.read8(i + regs));
     }
-    // cpu.index_register += register_x + 1;
 }
