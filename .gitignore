@@ -2,3 +2,4 @@
 Cargo.lock
 
 /src/SDL2.dll
+/src/chip_8/roms
