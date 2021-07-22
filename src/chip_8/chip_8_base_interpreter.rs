@@ -10,35 +10,26 @@ const DISPLAY_HEIGHT: usize = 32;
 const DISPLAY_SCALE: u32 = 10;
 
 pub struct ProgramCounter(usize);
+pub struct Ram([u8; 4 * 1024]);
+pub struct DisplayBuffer([[bool; DISPLAY_HEIGHT]; DISPLAY_WIDTH]);
 pub struct Registers{
     x_0: u8, x_1: u8, x_2: u8, x_3: u8, x_4: u8, x_5: u8, x_6: u8, x_7: u8,
     x_8: u8, x_9: u8, x_a: u8, x_b: u8, x_c: u8, x_d: u8, x_e: u8, x_f: u8
 }
-pub struct Ram([u8; 4 * 1024]);
-pub struct DisplayBuffer([[bool; DISPLAY_HEIGHT]; DISPLAY_WIDTH]);
-
-pub struct Timer{
+pub struct Clock{
     tick: u8,
     clock_hz: u128,
     elapsed: std::time::SystemTime
 }
-
 pub struct Keypad { 
     key_status: [bool; 0x10],
     keys: std::collections::HashMap<sdl2::keyboard::Keycode, usize>
 }
-
 pub struct OpCodes { 
     opcode: u16, 
-    n1: u8, 
-    n2: u8, 
-    n3: u8, 
-    n4: u8,
-    x: usize,
-    y: usize,
-    n: u8,
-    nn: u8,
-    nnn: usize
+    n1: u8, n2: u8, n3: u8, n4: u8,
+    x: usize, y: usize,
+    n: u8, nn: u8, nnn: usize
 }
 
 impl ProgramCounter {
@@ -48,20 +39,12 @@ impl ProgramCounter {
         }
     }
 
-    fn increase(&mut self) {
+    fn increment(&mut self) {
         self.0 += 2;
     }
 
     fn decrement(&mut self) {
         self.0 -= 2;
-    }
-
-    fn set(&mut self, value: usize) {
-        self.0 = value;
-    }
-
-    fn get(&self) -> usize {
-        self.0
     }
 }
 
@@ -128,7 +111,7 @@ impl Ram {
     }
 
     fn load_rom(&mut self, rom: &[u8] ) {
-        assert!(rom.len() <= self.0.len() - 0x200);
+        assert!(rom.len() <= self.0.len() - 0x200, "ROM is bigger than Chip-8 RAM");
         for i in 0..rom.len() {
             self.0[0x200 + i] = rom[i];
         }
@@ -141,22 +124,18 @@ impl Ram {
 
     fn read16(&self, addr: usize) -> u16 {
         assert!(addr < self.0.len(), "addr = {}, self.0.len() = {}", addr, self.0.len());
-        // byteorder::LittleEndian::read_u16(&self.0[addr]);
-        
-        // u16::from_le_bytes(self.ram[addr..addr+2])
-        // self.ram[addr..addr+2]
         (self.0[addr] as u16) << 8 | self.0[addr+1] as u16
     }
 
-    fn write8(&mut self, addr: usize, value: u8) {
+    fn write(&mut self, addr: usize, value: u8) {
         assert!(addr < self.0.len());
         self.0[addr] = value;
     }
 }
 
-impl Timer {
-    fn init() -> Timer {
-        Timer {
+impl Clock {
+    fn init() -> Clock {
+        Clock {
             tick: 255,
             clock_hz: 60,
             elapsed: std::time::SystemTime::now()
@@ -261,64 +240,59 @@ impl OpCodes {
 
         OpCodes {
             opcode: opcode,
-            n1: n1 as u8,
-            n2: n2 as u8,
-            n3: n3 as u8,
-            n4: n4 as u8,
-            x: n2 as usize,
-            y: n3 as usize,
-            n: n4 as u8,
-            nn: nn as u8,
-            nnn: nnn as usize
+            n1: n1 as u8, n2: n2 as u8, n3: n3 as u8, n4: n4 as u8,
+            x: n2 as usize, y: n3 as usize,
+            n: n4 as u8, nn: nn as u8, nnn: nnn as usize
         }
     }    
 }
 
 struct CPU {
-    pc: ProgramCounter,
-    index_register: usize,
-    stack: Vec<usize>,
-    delay_timer: Timer,
-    sound_timer: Timer,
-    clock: Timer,
-    registers: Registers,
-    ram: Ram,
-    keypad: Keypad,
-    display_buffer: DisplayBuffer,
-    opcode: OpCodes,
+    pc: ProgramCounter,   // Program Counter
+    i: usize,             // Index Register
+    stack: Vec<usize>,    // Function Stack
+    dt: Clock,            // Delay Timer
+    st: Clock,            // Sound Timer
+    clock: Clock,         // CPU Clock
+    registers: Registers, // Registers
+    ram: Ram,             // RAM
+    keypad: Keypad,       // Keypad
+    db: DisplayBuffer,    // Display Buffer
+    op: OpCodes,          // Operation Code
 
-    str_to_hex_map: std::collections::HashMap<char, Option<u8>>
+    str_to_hex_helper: std::collections::HashMap<char, Option<u8>> // Helper
 }
 
 impl CPU {
     fn init() -> CPU {
         CPU {
             pc: ProgramCounter::init(),
-            index_register: 0,
+            i: 0,
             stack: vec![],
-            delay_timer: Timer::init(),
-            sound_timer: Timer::init(),
-            clock: Timer::init(),
+            dt: Clock::init(),
+            st: Clock::init(),
+            clock: Clock::init(),
             registers: Registers::init(),
             ram: Ram::init(),
             keypad: Keypad::init(),
-            display_buffer: DisplayBuffer::init(),
-            opcode: OpCodes::init(0000),
+            db: DisplayBuffer::init(),
+            op: OpCodes::init(0000),
 
-            str_to_hex_map: [('0', Some(0x0)), ('1', Some(0x1)), ('2', Some(0x2)), ('3', Some(0x3)),
-                             ('4', Some(0x4)), ('5', Some(0x5)), ('6', Some(0x6)), ('7', Some(0x7)),
-                             ('8', Some(0x8)), ('9', Some(0x9)), ('A', Some(0xA)), ('B', Some(0xB)),
-                             ('C', Some(0xC)), ('D', Some(0xD)), ('E', Some(0xE)), ('F', Some(0xF)),
-                             ('?', None)].iter().cloned().collect()
+            str_to_hex_helper: [('0', Some(0x0)), ('1', Some(0x1)), ('2', Some(0x2)), ('3', Some(0x3)),
+                                ('4', Some(0x4)), ('5', Some(0x5)), ('6', Some(0x6)), ('7', Some(0x7)),
+                                ('8', Some(0x8)), ('9', Some(0x9)), ('A', Some(0xA)), ('B', Some(0xB)),
+                                ('C', Some(0xC)), ('D', Some(0xD)), ('E', Some(0xE)), ('F', Some(0xF)),
+                                ('?', None)].iter().cloned().collect()
         }
     }
 
     fn fetch(&mut self) {
-        self.opcode = OpCodes::init(self.ram.read16(self.pc.get()));
-        self.pc.increase();
+        self.op = OpCodes::init(self.ram.read16(self.pc.0));
+        self.pc.increment();
     }
 
     fn decode(&mut self) {
+        //TODO: function pointers
         if self.decode_match("00E0") { op_00e0(self);
         } else if self.decode_match("1???") { op_1nnn(self);
         } else if self.decode_match("00EE") { op_00ee(self);
@@ -354,14 +328,14 @@ impl CPU {
         } else if self.decode_match("F?55") { op_fx55(self);
         } else if self.decode_match("F?65") { op_fx65(self);
         } else {
-            println!{"Unknown instruction: {:04x}", self.opcode.opcode};
+            println!{"Unknown instruction: {:04x}", self.op.opcode};
         }
     }
 
     fn decode_match(&self, hex_code: &str) -> bool {
         let mut res: bool = true;
         for (i, c) in hex_code.chars().enumerate() {
-            match self.str_to_hex_map.get(&c) {
+            match self.str_to_hex_helper.get(&c) {
                 Some(Some(hex)) => res = res && self.compare_nibble(i, &hex),
                 Some(None) => res = res && true,
                 _ => res = res && false
@@ -372,10 +346,10 @@ impl CPU {
 
     fn compare_nibble(&self, pos: usize, nibble: &u8) -> bool{
         match pos {
-            0 => *nibble == self.opcode.n1,
-            1 => *nibble == self.opcode.n2,
-            2 => *nibble == self.opcode.n3,
-            3 => *nibble == self.opcode.n4,
+            0 => *nibble == self.op.n1,
+            1 => *nibble == self.op.n2,
+            2 => *nibble == self.op.n3,
+            3 => *nibble == self.op.n4,
             _ => false
         }
     }
@@ -384,25 +358,8 @@ impl CPU {
 pub fn run() {
     let mut cpu = CPU::init();
     cpu.ram.init_fonts();
-    // load_rom("src/chip_8/roms/ibm_logo.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/BC_test.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Keypad_Test_Hap_2006.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Trip8 Demo (2008) [Revival Studios].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Zero Demo [zeroZshadow, 2007].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Particle Demo [zeroZshadow, 2008].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Sierpinski [Sergey Naydenov, 2010].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Chip8 emulator Logo [Garstyciuks].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/Stars [Sergey Naydenov, 2010].ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/test_opcode.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/HIDDEN.ch8", &mut cpu); // Good to test keyboard
-    load_rom("src/chip_8/roms/CAVE.ch8", &mut cpu); // Good to test keyboard
-    // load_rom("src/chip_8/roms/TRON.ch8", &mut cpu); // Good to test keyboard
-    // load_rom("src/chip_8/roms/PUZZLE.ch8", &mut cpu); // Good to test keyboard?
-    // load_rom("src/chip_8/roms/TETRIS.ch8", &mut cpu); // Good to test keyboard? 
-    // load_rom("src/chip_8/roms/delay_timer_test.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/random_number_test.ch8", &mut cpu);
-    // load_rom("src/chip_8/roms/SNAKE.ch8", &mut cpu);
-
+    load_rom("src/chip_8/roms/Trip8 Demo (2008) [Revival Studios].ch8", &mut cpu);
+    
     let sdl_context = sdl2::init().unwrap();
     let mut display = crate::chip_8::display::Display::init(&sdl_context, DISPLAY_SCALE);
     let mut event_listener = sdl_context.event_pump().unwrap();
@@ -426,7 +383,7 @@ pub fn run() {
                 },
                 sdl2::event::Event::KeyDown { 
                     keycode: Some(sdl2::keyboard::Keycode::Backspace), .. } => {
-                    cpu.pc.set(0x200);
+                    cpu.pc.0 = 0x200;
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(keycode), ..} => {
                     if let Some(key_index) = cpu.keypad.compute_keycode(keycode) {
@@ -442,13 +399,13 @@ pub fn run() {
             }
         }
 
-        cpu.delay_timer.tick();
-        cpu.sound_timer.tick();
+        cpu.dt.tick();
+        cpu.st.tick();
         if cpu.clock.tick() {
             cpu.fetch();
             cpu.decode();
             if cpu.decode_match("D???") {
-                display.draw(&cpu.display_buffer.0)
+                display.draw(&cpu.db.0)
             }
         }
     }
@@ -462,140 +419,138 @@ fn load_rom(filename: &str, cpu: &mut CPU) {
     cpu.ram.load_rom(&buffer);
 }
 
-// fn op_0NNN() {}//ignore
-
 fn op_00e0(cpu: &mut CPU) {
-    cpu.display_buffer.clear();
+    cpu.db.clear();
 }
 
 fn op_1nnn(cpu: &mut CPU) {
-    cpu.pc.set(cpu.opcode.nnn);
+    cpu.pc.0 = cpu.op.nnn;
 }
 
 fn op_00ee(cpu: &mut CPU) {
     let value = cpu.stack.pop();
     match value {
         Some(value) => {
-            cpu.pc.set(value);
+            cpu.pc.0 = value;
         }
         _ => {}
     }
 }
 
 fn op_2nnn(cpu: &mut CPU) {
-    cpu.stack.push(cpu.pc.get());
-    cpu.pc.set(cpu.opcode.nnn);
+    cpu.stack.push(cpu.pc.0);
+    cpu.pc.0 = cpu.op.nnn;
 }
 
 fn op_3xnn(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.opcode.x) == cpu.opcode.nn {
-        cpu.pc.increase();
+    if cpu.registers.get(cpu.op.x) == cpu.op.nn {
+        cpu.pc.increment();
     }
 }
 
 fn op_4xnn(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.opcode.x) != cpu.opcode.nn {
-        cpu.pc.increase();
+    if cpu.registers.get(cpu.op.x) != cpu.op.nn {
+        cpu.pc.increment();
     }
 }
 
 fn op_5xy0(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.opcode.x) == cpu.registers.get(cpu.opcode.y) {
-        cpu.pc.increase();
+    if cpu.registers.get(cpu.op.x) == cpu.registers.get(cpu.op.y) {
+        cpu.pc.increment();
     }
 }
 
 fn op_9xy0(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.opcode.x) != cpu.registers.get(cpu.opcode.y) {
-        cpu.pc.increase();
+    if cpu.registers.get(cpu.op.x) != cpu.registers.get(cpu.op.y) {
+        cpu.pc.increment();
     }
 }
 
 fn op_6xnn(cpu: &mut CPU) {
-    cpu.registers.set(cpu.opcode.x, cpu.opcode.nn);
+    cpu.registers.set(cpu.op.x, cpu.op.nn);
 }
 
 fn op_7xnn(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    cpu.registers.set(cpu.opcode.x, cpu.opcode.nn.wrapping_add(vx));
+    let vx = cpu.registers.get(cpu.op.x);
+    cpu.registers.set(cpu.op.x, cpu.op.nn.wrapping_add(vx));
 }
 
 fn op_8xy0(cpu: &mut CPU) {
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vy);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vy);
 }
 
 fn op_8xy1(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vx | vy);
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vx | vy);
 }
 
 fn op_8xy2(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vx & vy);
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vx & vy);
 }
 
 fn op_8xy3(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vx ^ vy);
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vx ^ vy);
 }
 
 fn op_8xy4(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vx.wrapping_add(vy));
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vx.wrapping_add(vy));
 }
 
 fn op_8xy5(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vx.wrapping_sub(vy));
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vx.wrapping_sub(vy));
     cpu.registers.x_f = if vx > vy {1} else {0};
 }
 
 fn op_8xy6(cpu: &mut CPU) {
-    let vy = cpu.registers.get(cpu.opcode.x);
-    let vx = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vy >> 1);
+    let vy = cpu.registers.get(cpu.op.x);
+    let vx = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vy >> 1);
     cpu.registers.x_f = vx & 0x1;
 }
 
 fn op_8xy7(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vy.wrapping_sub(vx));
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vy.wrapping_sub(vx));
     cpu.registers.x_f = if vy > vx {1} else {0};
 }
 
 fn op_8xye(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    let vy = cpu.registers.get(cpu.opcode.y);
-    cpu.registers.set(cpu.opcode.x, vy << 1);
+    let vx = cpu.registers.get(cpu.op.x);
+    let vy = cpu.registers.get(cpu.op.y);
+    cpu.registers.set(cpu.op.x, vy << 1);
     cpu.registers.x_f = (vx & 0x80) >> 7;
     
 }
 
 fn op_annn(cpu: &mut CPU) {
-    cpu.index_register = cpu.opcode.nnn;
+    cpu.i = cpu.op.nnn;
 }
 
 fn op_bnnn(cpu: &mut CPU) {
-    cpu.pc.set(cpu.opcode.nnn + cpu.registers.x_0 as usize);
+    cpu.pc.0 = cpu.op.nnn + cpu.registers.x_0 as usize;
 }
 
 fn op_cxnn(cpu: &mut CPU) {
     let mut rng = rand::thread_rng();
-    cpu.registers.set(cpu.opcode.x, rng.gen_range(0x0..0xFF) & cpu.opcode.nn);
+    cpu.registers.set(cpu.op.x, rng.gen_range(0x0..0xFF) & cpu.op.nn);
 }
 
 fn op_dxyn(cpu: &mut CPU) {
     let mut vf: bool = false;
-    let value = cpu.opcode.n as usize;
-    let ori_x = cpu.registers.get(cpu.opcode.x) as usize % DISPLAY_WIDTH;
-    let ori_y = cpu.registers.get(cpu.opcode.y) as usize % DISPLAY_HEIGHT;
+    let value = cpu.op.n as usize;
+    let ori_x = cpu.registers.get(cpu.op.x) as usize % DISPLAY_WIDTH;
+    let ori_y = cpu.registers.get(cpu.op.y) as usize % DISPLAY_HEIGHT;
 
     for row in 0..value {
         let y = ori_y + row;
@@ -603,7 +558,7 @@ fn op_dxyn(cpu: &mut CPU) {
             break;
         }
 
-        let sprite = cpu.ram.read8(cpu.index_register + row);
+        let sprite = cpu.ram.read8(cpu.i + row);
         for pixel_position in 0..8 {
             let x = ori_x + pixel_position;
             if x >= DISPLAY_WIDTH {
@@ -611,8 +566,8 @@ fn op_dxyn(cpu: &mut CPU) {
             }
 
             let memory_pixel: bool = (sprite & (1 << (7 - pixel_position))) > 0;
-            let display_pixel: bool = cpu.display_buffer.0[x][y];
-            cpu.display_buffer.0[x][y] = memory_pixel ^ display_pixel;
+            let display_pixel: bool = cpu.db.0[x][y];
+            cpu.db.0[x][y] = memory_pixel ^ display_pixel;
             vf = (memory_pixel && display_pixel) || vf;
         }
     }
@@ -620,62 +575,62 @@ fn op_dxyn(cpu: &mut CPU) {
 }
 
 fn op_ex9e(cpu: &mut CPU) {
-    if cpu.keypad.get(cpu.registers.get(cpu.opcode.x) as usize) {
-        cpu.pc.increase();
+    if cpu.keypad.get(cpu.registers.get(cpu.op.x) as usize) {
+        cpu.pc.increment();
     }
 }
 
 fn op_exa1(cpu: &mut CPU) {
-    if !cpu.keypad.get(cpu.registers.get(cpu.opcode.x) as usize) {
-        cpu.pc.increase();
+    if !cpu.keypad.get(cpu.registers.get(cpu.op.x) as usize) {
+        cpu.pc.increment();
     }
 }
 
 fn op_fx07(cpu: &mut CPU) {
-    cpu.registers.set(cpu.opcode.x, cpu.delay_timer.tick);
+    cpu.registers.set(cpu.op.x, cpu.dt.tick);
 }
 
 fn op_fx15(cpu: &mut CPU) {
-    cpu.delay_timer.tick = cpu.registers.get(cpu.opcode.x);
+    cpu.dt.tick = cpu.registers.get(cpu.op.x);
 }
 
 fn op_fx18(cpu: &mut CPU) {
-    cpu.sound_timer.tick = cpu.registers.get(cpu.opcode.x);
+    cpu.st.tick = cpu.registers.get(cpu.op.x);
 }
 
 fn op_fx1e(cpu: &mut CPU) {
-    cpu.index_register += cpu.registers.get(cpu.opcode.x) as usize;
+    cpu.i += cpu.registers.get(cpu.op.x) as usize;
 }
 
 fn op_fx0a(cpu: &mut CPU) {
     match cpu.keypad.being_pressed() {
-        Some(key) => { cpu.registers.set(cpu.opcode.x, key); },
+        Some(key) => { cpu.registers.set(cpu.op.x, key); },
         _ => { cpu.pc.decrement(); }
     }
 }
 
 fn op_fx29(cpu: &mut CPU) {
-    let char = (cpu.registers.get(cpu.opcode.x) & 0xF) as usize;
-    cpu.index_register = 0x50 + char * 5;
+    let char = (cpu.registers.get(cpu.op.x) & 0xF) as usize;
+    cpu.i = 0x50 + char * 5;
 }
 
 fn op_fx33(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.opcode.x);
-    cpu.ram.write8(cpu.index_register, vx / 100);
-    cpu.ram.write8(cpu.index_register + 1, vx / 10 % 10);
-    cpu.ram.write8(cpu.index_register + 2, vx % 10);
+    let vx = cpu.registers.get(cpu.op.x);
+    cpu.ram.write(cpu.i, vx / 100);
+    cpu.ram.write(cpu.i + 1, vx / 10 % 10);
+    cpu.ram.write(cpu.i + 2, vx % 10);
 }
 
 fn op_fx55(cpu: &mut CPU) {
-    let i = cpu.index_register;
-    for regs in 0x0..(cpu.opcode.x + 1) {
-        cpu.ram.write8(i + regs, cpu.registers.get(regs));
+    let i = cpu.i;
+    for regs in 0x0..(cpu.op.x + 1) {
+        cpu.ram.write(i + regs, cpu.registers.get(regs));
     }
 }
 
 fn op_fx65(cpu: &mut CPU) {
-    let i = cpu.index_register;
-    for regs in 0x0..(cpu.opcode.x + 1) {
+    let i = cpu.i;
+    for regs in 0x0..(cpu.op.x + 1) {
         cpu.registers.set(regs, cpu.ram.read8(i + regs));
     }
 }
