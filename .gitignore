@@ -1,5 +1,7 @@
 /target
+/.vscode
 Cargo.lock
 
-/src/SDL2.dll
-/src/chip_8/roms
+*.sch8
+*.ch8
+*.dll
