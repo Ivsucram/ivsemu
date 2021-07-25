@@ -5,15 +5,15 @@ pub struct Display {
     canvas: sdl2::render::Canvas<sdl2::video::Window>,
     scale: u32,
     off_color: sdl2::pixels::Color,
-    on_color: sdl2::pixels::Color
+    on_color: sdl2::pixels::Color,
 }
 
 impl Display {
     pub fn init(sdl_context: &sdl2::Sdl, scale: u32) -> Display {
         let video_subsystem = sdl_context.video().unwrap();
-        
-        let window = video_subsystem.window("Chip-8", WIDTH as u32 * scale,  
-                                                      HEIGHT as u32 * scale)
+
+        let window = video_subsystem
+            .window("Chip-8", WIDTH as u32 * scale, HEIGHT as u32 * scale)
             .position_centered()
             .build()
             .unwrap();
@@ -23,8 +23,8 @@ impl Display {
         Display {
             canvas: canvas,
             scale: scale,
-            off_color: sdl2::pixels::Color::RGB(0, 0, 0),
-            on_color: sdl2::pixels::Color::RGB(255, 255, 255)
+            off_color: sdl2::pixels::Color::RGB(125, 23, 123),
+            on_color: sdl2::pixels::Color::RGB(180, 180, 255),
         }
     }
 
@@ -40,7 +40,8 @@ impl Display {
                     let y = (y as u32 * self.scale) as i32;
                     let width = self.scale;
                     let height = self.scale;
-                    self.canvas.fill_rect(sdl2::rect::Rect::new(x, y, width, height))
+                    self.canvas
+                        .fill_rect(sdl2::rect::Rect::new(x, y, width, height))
                         .expect("Failed to draw pixel");
                 }
             }
