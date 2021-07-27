@@ -1,11 +1,15 @@
+use sdl2::render::Canvas;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
 
 pub struct Display {
-    canvas: sdl2::render::Canvas<sdl2::video::Window>,
+    canvas: Canvas<sdl2::video::Window>,
     scale: u32,
-    off_color: sdl2::pixels::Color,
-    on_color: sdl2::pixels::Color,
+    off_color: Color,
+    on_color: Color,
 }
 
 impl Display {
@@ -23,8 +27,8 @@ impl Display {
         Display {
             canvas: canvas,
             scale: scale,
-            off_color: sdl2::pixels::Color::RGB(125, 23, 123),
-            on_color: sdl2::pixels::Color::RGB(180, 180, 255),
+            off_color: Color::RGB(0, 0, 0),
+            on_color: Color::RGB(255, 255, 255),
         }
     }
 
@@ -41,7 +45,7 @@ impl Display {
                     let width = self.scale;
                     let height = self.scale;
                     self.canvas
-                        .fill_rect(sdl2::rect::Rect::new(x, y, width, height))
+                        .fill_rect(Rect::new(x, y, width, height))
                         .expect("Failed to draw pixel");
                 }
             }
