@@ -1,6 +1,6 @@
 pub struct RAM {
     ram: [u8; 4 * 1024],
-    pub font_address: usize,
+    font_address: usize,
     rom_address: usize,
 }
 
@@ -37,7 +37,11 @@ impl RAM {
         }
     }
 
-    pub fn write_rom(&mut self, rom: &[u8]) {
+    pub fn get_font_address(&self) -> usize {
+        self.font_address
+    }
+
+    pub fn load_rom(&mut self, rom: &[u8]) {
         assert!(
             rom.len() <= self.ram.len() - 0x200,
             "ROM is bigger than Chip-8 RAM"
@@ -67,7 +71,7 @@ impl RAM {
         (self.ram[addr] as u16) << 8 | self.ram[addr + 1] as u16
     }
 
-    pub fn write(&mut self, addr: usize, value: u8) {
+    pub fn write8(&mut self, addr: usize, value: u8) {
         assert!(
             addr < self.ram.len(),
             "addr = {}, self.0.len() = {}",

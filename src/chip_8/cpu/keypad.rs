@@ -41,7 +41,7 @@ impl Keypad {
         }
     }
 
-    pub fn get(&mut self, pos: usize) -> bool {
+    pub fn get_status(&mut self, pos: usize) -> bool {
         self.key_status[pos]
     }
 

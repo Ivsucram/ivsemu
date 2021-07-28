@@ -1,5 +1,7 @@
+const INITIAL_PC: usize = 0x200;
+
 pub struct Registers {
-    pub x_0: u8,
+    x_0: u8,
     x_1: u8,
     x_2: u8,
     x_3: u8,
@@ -14,7 +16,9 @@ pub struct Registers {
     x_c: u8,
     x_d: u8,
     x_e: u8,
-    pub x_f: u8,
+    x_f: u8,        // Flag register
+    pub pc: usize,  // Program Counter
+    pub i: usize    // Index register
 }
 
 impl Registers {
@@ -36,6 +40,8 @@ impl Registers {
             x_d: 0,
             x_e: 0,
             x_f: 0,
+            pc: INITIAL_PC,
+            i: 0,
         }
     }
 
@@ -83,5 +89,17 @@ impl Registers {
             0xF => self.x_f = value,
             _ => {}
         }
+    }
+
+    pub fn increment_pc(&mut self) {
+        self.pc += 2;
+    }
+
+    pub fn decrement_pc(&mut self) {
+        self.pc -= 2;
+    }
+
+    pub fn reset_pc(&mut self) {
+        self.pc = INITIAL_PC;
     }
 }

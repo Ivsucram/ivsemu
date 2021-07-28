@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 pub struct Clock {
     pub tick: u8,
-    pub clock_hz: f64,
+    clock_hz: f64,
     elapsed: SystemTime,
 }
 
@@ -34,11 +34,35 @@ impl Clock {
         res
     }
 
-    pub fn reset_elapsed(&mut self) {
+    fn reset_elapsed(&mut self) {
         self.elapsed = SystemTime::now();
     }
 
     pub fn clock_hz_as_secs_f64(&self) -> f64 {
         1. / self.clock_hz
+    }
+
+    pub fn increase_clock(&mut self, is_printing: bool) {
+        if is_printing {
+            println!(
+                "Increasing cpu clock from {:5} Hz to {:5} Hz",
+                self.clock_hz,
+                self.clock_hz + 10.
+            );
+        }
+        self.clock_hz += 10.;
+    }
+
+    pub fn decrease_clock(&mut self, is_printing: bool) {
+        if self.clock_hz > 10. {
+            if is_printing {
+                println!(
+                    "Decreasing cpu clock from {:5} Hz to {:5} Hz",
+                    self.clock_hz,
+                    self.clock_hz - 10.
+                );
+            }
+            self.clock_hz -= 10.;
+        }
     }
 }

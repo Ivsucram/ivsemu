@@ -2,46 +2,48 @@ use super::clock::Clock;
 use super::display_buffer::{DisplayBuffer, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 use super::keypad::Keypad;
 use super::opcodes::OpCodes;
-use super::program_counter::ProgramCounter;
 use super::ram::RAM;
 use super::registers::Registers;
+
+use sdl2::keyboard::Keycode;
 
 use rand::Rng;
 
 pub struct CPU {
-    pub pc: ProgramCounter,
-    pub i: usize,
-    pub stack: Vec<usize>,
-    pub dt: Clock,
-    pub st: Clock,
-    pub clock: Clock,
-    pub registers: Registers,
-    pub ram: RAM,
-    pub keypad: Keypad,
-    pub db: DisplayBuffer,
-    pub op: OpCodes,
+    stack: Vec<usize>,      // Function Stack
+    dt: Clock,              // Delay Timer
+    st: Clock,              // Sound Timer
+    clock: Clock,           // CPU Clock
+    regs: Registers,        // Registers
+    ram: RAM,               // RAM
+    keypad: Keypad,         // Keypad
+    db: DisplayBuffer,      // Display Buffer
+    op: OpCodes,            // Operation Code,
+    pub should_redraw: bool // Boolean indicating Display Buffer update
 }
 
 impl CPU {
     pub fn new() -> CPU {
+        let mut ram = RAM::new();
+        ram.init_fonts();
+
         CPU {
-            pc: ProgramCounter::new(),
-            i: 0,
             stack: vec![],
             dt: Clock::new(),
             st: Clock::new(),
             clock: Clock::new(),
-            registers: Registers::new(),
-            ram: RAM::new(),
+            regs: Registers::new(),
+            ram: ram,
             keypad: Keypad::new(),
             db: DisplayBuffer::new(10),
             op: OpCodes::new(0000),
+            should_redraw: false
         }
     }
 
     pub fn fetch(&mut self) {
-        self.op = OpCodes::new(self.ram.read16(self.pc.0));
-        self.pc.increment();
+        self.op = OpCodes::new(self.ram.read16(self.regs.pc));
+        self.regs.increment_pc();
     }
 
     pub fn decode(&mut self) {
@@ -92,6 +94,7 @@ impl CPU {
             op_cxnn(self);
         } else if self.decode_match("D???") {
             op_dxyn(self);
+            self.should_redraw = true;
         } else if self.decode_match("E?9E") {
             op_ex9e(self);
         } else if self.decode_match("E?A1") {
@@ -119,7 +122,7 @@ impl CPU {
         }
     }
 
-    pub fn decode_match(&self, hex_code: &str) -> bool {
+    fn decode_match(&self, hex_code: &str) -> bool {
         assert!(
             hex_code.len() == 4,
             "Instruction with wrong size. All chip-8 instructions have 16 bits"
@@ -155,6 +158,66 @@ impl CPU {
             _ => false,
         }
     }
+
+    pub fn reset_rom(&mut self) {
+        self.regs.reset_pc();
+    }
+
+    pub fn increase_clock(&mut self, is_printing: bool) {
+        self.clock.increase_clock(is_printing);
+    }
+
+    pub fn decrease_clock(&mut self, is_printing: bool) {
+        self.clock.decrease_clock(is_printing);
+    }
+
+    pub fn compute_keycode(&mut self, keycode: Keycode) -> Option<usize> {
+        self.keypad.compute_keycode(keycode)
+    }
+
+    pub fn press_key(&mut self, key_index: usize) {
+        self.keypad.press(key_index);
+    }
+
+    pub fn release_key(&mut self, key_index: usize) {
+        self.keypad.release(key_index);
+    }
+
+    pub fn get_delay_timer(&self) -> u8 {
+        self.dt.tick
+    }
+
+    pub fn set_delay_timer(&mut self, tick: u8) {
+        self.dt.tick = tick;
+    } 
+
+    pub fn set_sound_timer(&mut self, tick: u8) {
+        self.st.tick = tick;
+    }
+
+    pub fn tick_delay_timer(&mut self) -> bool {
+        self.dt.tick()
+    }
+
+    pub fn tick_sound_timer(&mut self) -> bool {
+        self.st.tick()
+    }
+
+    pub fn tick(&mut self) -> bool {
+        self.clock.tick()
+    }
+
+    pub fn load_rom(&mut self, rom: &[u8]) {
+        self.ram.load_rom(rom);
+    }
+
+    pub fn get_display_scale(&self) -> u32 {
+        self.db.scale
+    }
+
+    pub fn get_display_buffer(&self) -> [[bool; DISPLAY_HEIGHT]; DISPLAY_WIDTH] {
+        self.db.db
+    }
 }
 
 fn op_00e0(cpu: &mut CPU) {
@@ -162,133 +225,133 @@ fn op_00e0(cpu: &mut CPU) {
 }
 
 fn op_1nnn(cpu: &mut CPU) {
-    cpu.pc.0 = cpu.op.nnn;
+    cpu.regs.pc = cpu.op.nnn;
 }
 
 fn op_00ee(cpu: &mut CPU) {
     let value = cpu.stack.pop();
     match value {
         Some(value) => {
-            cpu.pc.0 = value;
+            cpu.regs.pc = value;
         }
         _ => {}
     }
 }
 
 fn op_2nnn(cpu: &mut CPU) {
-    cpu.stack.push(cpu.pc.0);
-    cpu.pc.0 = cpu.op.nnn;
+    cpu.stack.push(cpu.regs.pc);
+    cpu.regs.pc = cpu.op.nnn;
 }
 
 fn op_3xnn(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.op.x) == cpu.op.nn {
-        cpu.pc.increment();
+    if cpu.regs.get(cpu.op.x) == cpu.op.nn {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_4xnn(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.op.x) != cpu.op.nn {
-        cpu.pc.increment();
+    if cpu.regs.get(cpu.op.x) != cpu.op.nn {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_5xy0(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.op.x) == cpu.registers.get(cpu.op.y) {
-        cpu.pc.increment();
+    if cpu.regs.get(cpu.op.x) == cpu.regs.get(cpu.op.y) {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_9xy0(cpu: &mut CPU) {
-    if cpu.registers.get(cpu.op.x) != cpu.registers.get(cpu.op.y) {
-        cpu.pc.increment();
+    if cpu.regs.get(cpu.op.x) != cpu.regs.get(cpu.op.y) {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_6xnn(cpu: &mut CPU) {
-    cpu.registers.set(cpu.op.x, cpu.op.nn);
+    cpu.regs.set(cpu.op.x, cpu.op.nn);
 }
 
 fn op_7xnn(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    cpu.registers.set(cpu.op.x, cpu.op.nn.wrapping_add(vx));
+    let vx = cpu.regs.get(cpu.op.x);
+    cpu.regs.set(cpu.op.x, cpu.op.nn.wrapping_add(vx));
 }
 
 fn op_8xy0(cpu: &mut CPU) {
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vy);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vy);
 }
 
 fn op_8xy1(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vx | vy);
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vx | vy);
 }
 
 fn op_8xy2(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vx & vy);
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vx & vy);
 }
 
 fn op_8xy3(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vx ^ vy);
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vx ^ vy);
 }
 
 fn op_8xy4(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vx.wrapping_add(vy));
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vx.wrapping_add(vy));
 }
 
 fn op_8xy5(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vx.wrapping_sub(vy));
-    cpu.registers.x_f = if vx > vy { 1 } else { 0 };
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vx.wrapping_sub(vy));
+    cpu.regs.set(0xF, if vx > vy { 1 } else { 0 });
 }
 
 fn op_8xy6(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vy >> 1);
-    cpu.registers.x_f = vx & 0x1;
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vy >> 1);
+    cpu.regs.set(0xF, vx & 0x1);
 }
 
 fn op_8xy7(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vy.wrapping_sub(vx));
-    cpu.registers.x_f = if vy > vx { 1 } else { 0 };
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vy.wrapping_sub(vx));
+    cpu.regs.set(0xF, if vy > vx { 1 } else { 0 });
 }
 
 fn op_8xye(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    let vy = cpu.registers.get(cpu.op.y);
-    cpu.registers.set(cpu.op.x, vy << 1);
-    cpu.registers.x_f = (vx & 0x80) >> 7;
+    let vx = cpu.regs.get(cpu.op.x);
+    let vy = cpu.regs.get(cpu.op.y);
+    cpu.regs.set(cpu.op.x, vy << 1);
+    cpu.regs.set(0xF, (vx & 0x80) >> 7);
 }
 
 fn op_annn(cpu: &mut CPU) {
-    cpu.i = cpu.op.nnn;
+    cpu.regs.i = cpu.op.nnn;
 }
 
 fn op_bnnn(cpu: &mut CPU) {
-    cpu.pc.0 = cpu.op.nnn + cpu.registers.x_0 as usize;
+    cpu.regs.pc = cpu.op.nnn + cpu.regs.get(0x0) as usize;
 }
 
 fn op_cxnn(cpu: &mut CPU) {
     let mut rng = rand::thread_rng();
-    cpu.registers
+    cpu.regs
         .set(cpu.op.x, rng.gen_range(0x0..0xFF) & cpu.op.nn);
 }
 
 fn op_dxyn(cpu: &mut CPU) {
     let mut vf: bool = false;
     let value = cpu.op.n as usize;
-    let ori_x = cpu.registers.get(cpu.op.x) as usize % DISPLAY_WIDTH;
-    let ori_y = cpu.registers.get(cpu.op.y) as usize % DISPLAY_HEIGHT;
+    let ori_x = cpu.regs.get(cpu.op.x) as usize % DISPLAY_WIDTH;
+    let ori_y = cpu.regs.get(cpu.op.y) as usize % DISPLAY_HEIGHT;
 
     for row in 0..value {
         let y = ori_y + row;
@@ -296,7 +359,7 @@ fn op_dxyn(cpu: &mut CPU) {
             break;
         }
 
-        let sprite = cpu.ram.read8(cpu.i + row);
+        let sprite = cpu.ram.read8(cpu.regs.i + row);
         for pixel_position in 0..8 {
             let x = ori_x + pixel_position;
             if x >= DISPLAY_WIDTH {
@@ -309,70 +372,70 @@ fn op_dxyn(cpu: &mut CPU) {
             vf = (memory_pixel && display_pixel) || vf;
         }
     }
-    cpu.registers.x_f = if vf { 1 } else { 0 };
+    cpu.regs.set(0xF, if vf { 1 } else { 0 });
 }
 
 fn op_ex9e(cpu: &mut CPU) {
-    if cpu.keypad.get(cpu.registers.get(cpu.op.x) as usize) {
-        cpu.pc.increment();
+    if cpu.keypad.get_status(cpu.regs.get(cpu.op.x) as usize) {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_exa1(cpu: &mut CPU) {
-    if !cpu.keypad.get(cpu.registers.get(cpu.op.x) as usize) {
-        cpu.pc.increment();
+    if !cpu.keypad.get_status(cpu.regs.get(cpu.op.x) as usize) {
+        cpu.regs.increment_pc();
     }
 }
 
 fn op_fx07(cpu: &mut CPU) {
-    cpu.registers.set(cpu.op.x, cpu.dt.tick);
+    cpu.regs.set(cpu.op.x, cpu.get_delay_timer());
 }
 
 fn op_fx15(cpu: &mut CPU) {
-    cpu.dt.tick = cpu.registers.get(cpu.op.x);
+    cpu.set_delay_timer(cpu.regs.get(cpu.op.x));
 }
 
 fn op_fx18(cpu: &mut CPU) {
-    cpu.st.tick = cpu.registers.get(cpu.op.x);
+    cpu.set_sound_timer(cpu.regs.get(cpu.op.x));
 }
 
 fn op_fx1e(cpu: &mut CPU) {
-    cpu.i += cpu.registers.get(cpu.op.x) as usize;
+    cpu.regs.i += cpu.regs.get(cpu.op.x) as usize;
 }
 
 fn op_fx0a(cpu: &mut CPU) {
     match cpu.keypad.being_pressed() {
         Some(key) => {
-            cpu.registers.set(cpu.op.x, key);
+            cpu.regs.set(cpu.op.x, key);
         }
         _ => {
-            cpu.pc.decrement();
+            cpu.regs.decrement_pc();
         }
     }
 }
 
 fn op_fx29(cpu: &mut CPU) {
-    let char = (cpu.registers.get(cpu.op.x) & 0xF) as usize;
-    cpu.i = cpu.ram.font_address + char * 5;
+    let char = (cpu.regs.get(cpu.op.x) & 0xF) as usize;
+    cpu.regs.i = cpu.ram.get_font_address() + char * 5;
 }
 
 fn op_fx33(cpu: &mut CPU) {
-    let vx = cpu.registers.get(cpu.op.x);
-    cpu.ram.write(cpu.i, vx / 100);
-    cpu.ram.write(cpu.i + 1, vx / 10 % 10);
-    cpu.ram.write(cpu.i + 2, vx % 10);
+    let vx = cpu.regs.get(cpu.op.x);
+    cpu.ram.write8(cpu.regs.i, vx / 100);
+    cpu.ram.write8(cpu.regs.i + 1, vx / 10 % 10);
+    cpu.ram.write8(cpu.regs.i + 2, vx % 10);
 }
 
 fn op_fx55(cpu: &mut CPU) {
-    let i = cpu.i;
+    let i = cpu.regs.i;
     for regs in 0x0..(cpu.op.x + 1) {
-        cpu.ram.write(i + regs, cpu.registers.get(regs));
+        cpu.ram.write8(i + regs, cpu.regs.get(regs));
     }
 }
 
 fn op_fx65(cpu: &mut CPU) {
-    let i = cpu.i;
+    let i = cpu.regs.i;
     for regs in 0x0..(cpu.op.x + 1) {
-        cpu.registers.set(regs, cpu.ram.read8(i + regs));
+        cpu.regs.set(regs, cpu.ram.read8(i + regs));
     }
 }
