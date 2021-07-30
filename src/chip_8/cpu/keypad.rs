@@ -35,10 +35,10 @@ impl Keypad {
     }
 
     pub fn compute_keycode(&self, keycode: Keycode) -> Option<usize> {
-        match self.keys.get(&keycode) {
-            Some(chip8_key) => Some(*chip8_key),
-            None => None,
+        if let Some(&chip8_key) = self.keys.get(&keycode) {
+            return Some(chip8_key);
         }
+        None
     }
 
     pub fn get_status(&mut self, pos: usize) -> bool {

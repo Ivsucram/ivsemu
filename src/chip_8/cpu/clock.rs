@@ -16,22 +16,16 @@ impl Clock {
     }
 
     pub fn tick(&mut self) -> bool {
-        let mut res: bool = false;
-        match self.elapsed.elapsed() {
-            Ok(elapsed) => {
-                if elapsed.as_secs_f64() >= self.clock_hz_as_secs_f64() {
-                    if self.tick > 0 {
-                        self.tick -= 1;
-                    }
-                    self.reset_elapsed();
-                    res = true;
+        if let Ok(elapsed) = self.elapsed.elapsed() {
+            if elapsed.as_secs_f64() >= self.clock_hz_as_secs_f64() {
+                if self.tick > 0 {
+                    self.tick -= 1;
                 }
-            }
-            Err(e) => {
-                println!("Error: {:?}", e);
+                self.reset_elapsed();
+                return true;
             }
         }
-        res
+        false
     }
 
     fn reset_elapsed(&mut self) {

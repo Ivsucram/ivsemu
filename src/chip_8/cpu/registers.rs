@@ -16,9 +16,9 @@ pub struct Registers {
     x_c: u8,
     x_d: u8,
     x_e: u8,
-    x_f: u8,        // Flag register
-    pub pc: usize,  // Program Counter
-    pub i: usize    // Index register
+    x_f: u8,       // Flag register
+    pub pc: usize, // Program Counter
+    pub i: usize,  // Index register
 }
 
 impl Registers {
@@ -64,7 +64,7 @@ impl Registers {
             0xD => self.x_d,
             0xE => self.x_e,
             0xF => self.x_f,
-            _ => 0,
+            _ => panic!("Trying to access non-existing register"),
         }
     }
 
@@ -87,7 +87,7 @@ impl Registers {
             0xD => self.x_d = value,
             0xE => self.x_e = value,
             0xF => self.x_f = value,
-            _ => {}
+            _ => panic!("Trying to access non-existing register"),
         }
     }
 

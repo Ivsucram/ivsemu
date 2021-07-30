@@ -1,43 +1,48 @@
 use super::cpu::cpu::CPU;
 use super::display::Display;
 
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 use std::io::Read;
 
 pub fn run() {
     let mut cpu = CPU::new();
-    load_rom("src/chip_8/roms/CAVE.ch8", &mut cpu);
+    load_rom(
+        "src/chip_8/roms/Trip8 Demo (2008) [Revival Studios].ch8",
+        &mut cpu,
+    );
 
     let sdl_context = sdl2::init().unwrap();
     let mut display = Display::init(&sdl_context, cpu.get_display_scale());
-    let mut event_listener = sdl_context.event_pump().unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
 
     'runner: loop {
-        for event in event_listener.poll_iter() {
+        for event in event_pump.poll_iter() {
             match event {
-                sdl2::event::Event::Quit { .. } => break 'runner,
-                sdl2::event::Event::KeyDown {
-                    keycode: Some(sdl2::keyboard::Keycode::Escape),
+                Event::Quit { .. } => break 'runner,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
                     ..
                 } => break 'runner,
-                sdl2::event::Event::KeyDown {
-                    keycode: Some(sdl2::keyboard::Keycode::RightBracket),
+                Event::KeyDown {
+                    keycode: Some(Keycode::RightBracket),
                     ..
                 } => {
                     cpu.increase_clock(true);
                 }
-                sdl2::event::Event::KeyDown {
-                    keycode: Some(sdl2::keyboard::Keycode::LeftBracket),
+                Event::KeyDown {
+                    keycode: Some(Keycode::LeftBracket),
                     ..
                 } => {
                     cpu.decrease_clock(true);
                 }
-                sdl2::event::Event::KeyDown {
-                    keycode: Some(sdl2::keyboard::Keycode::Backspace),
+                Event::KeyDown {
+                    keycode: Some(Keycode::Backspace),
                     ..
                 } => {
                     cpu.reset_rom();
                 }
-                sdl2::event::Event::KeyDown {
+                Event::KeyDown {
                     keycode: Some(keycode),
                     ..
                 } => {
@@ -45,7 +50,7 @@ pub fn run() {
                         cpu.press_key(key_index);
                     }
                 }
-                sdl2::event::Event::KeyUp {
+                Event::KeyUp {
                     keycode: Some(keycode),
                     ..
                 } => {

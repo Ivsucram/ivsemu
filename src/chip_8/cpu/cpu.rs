@@ -10,16 +10,16 @@ use sdl2::keyboard::Keycode;
 use rand::Rng;
 
 pub struct CPU {
-    stack: Vec<usize>,      // Function Stack
-    dt: Clock,              // Delay Timer
-    st: Clock,              // Sound Timer
-    clock: Clock,           // CPU Clock
-    regs: Registers,        // Registers
-    ram: RAM,               // RAM
-    keypad: Keypad,         // Keypad
-    db: DisplayBuffer,      // Display Buffer
-    op: OpCodes,            // Operation Code,
-    pub should_redraw: bool // Boolean indicating Display Buffer update
+    stack: Vec<usize>,       // Function Stack
+    dt: Clock,               // Delay Timer
+    st: Clock,               // Sound Timer
+    clock: Clock,            // CPU Clock
+    regs: Registers,         // Registers
+    ram: RAM,                // RAM
+    keypad: Keypad,          // Keypad
+    db: DisplayBuffer,       // Display Buffer
+    op: OpCodes,             // Operation Code,
+    pub should_redraw: bool, // Boolean indicating Display Buffer update
 }
 
 impl CPU {
@@ -37,7 +37,7 @@ impl CPU {
             keypad: Keypad::new(),
             db: DisplayBuffer::new(10),
             op: OpCodes::new(0000),
-            should_redraw: false
+            should_redraw: false,
         }
     }
 
@@ -189,7 +189,7 @@ impl CPU {
 
     pub fn set_delay_timer(&mut self, tick: u8) {
         self.dt.tick = tick;
-    } 
+    }
 
     pub fn set_sound_timer(&mut self, tick: u8) {
         self.st.tick = tick;
@@ -343,8 +343,7 @@ fn op_bnnn(cpu: &mut CPU) {
 
 fn op_cxnn(cpu: &mut CPU) {
     let mut rng = rand::thread_rng();
-    cpu.regs
-        .set(cpu.op.x, rng.gen_range(0x0..0xFF) & cpu.op.nn);
+    cpu.regs.set(cpu.op.x, rng.gen_range(0x0..0xFF) & cpu.op.nn);
 }
 
 fn op_dxyn(cpu: &mut CPU) {
