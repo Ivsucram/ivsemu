@@ -13,7 +13,7 @@ pub fn run() {
     );
 
     let sdl_context = sdl2::init().unwrap();
-    let mut display = Display::init(&sdl_context, cpu.get_display_scale());
+    let mut display = Display::init(&sdl_context);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     'runner: loop {
@@ -68,7 +68,7 @@ pub fn run() {
             cpu.fetch();
             cpu.decode();
             if cpu.should_redraw {
-                display.draw(&cpu.get_display_buffer());
+                display.draw(&cpu.get_frame_buffer());
                 cpu.should_redraw = false;
             }
         }
