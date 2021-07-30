@@ -1,7 +1,7 @@
 pub mod cpu;
 
 mod clock;
-mod display_buffer;
+mod frame_buffer;
 mod keypad;
 mod opcodes;
 mod ram;

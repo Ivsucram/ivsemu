@@ -1,5 +1,5 @@
 use super::clock::Clock;
-use super::display_buffer::{DisplayBuffer, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use super::frame_buffer::{FrameBuffer, HEIGHT, WIDTH, PITCH_BYTES};
 use super::keypad::Keypad;
 use super::opcodes::OpCodes;
 use super::ram::RAM;
@@ -10,16 +10,16 @@ use sdl2::keyboard::Keycode;
 use rand::Rng;
 
 pub struct CPU {
-    stack: Vec<usize>,       // Function Stack
-    dt: Clock,               // Delay Timer
-    st: Clock,               // Sound Timer
-    clock: Clock,            // CPU Clock
-    regs: Registers,         // Registers
-    ram: RAM,                // RAM
-    keypad: Keypad,          // Keypad
-    db: DisplayBuffer,       // Display Buffer
-    op: OpCodes,             // Operation Code,
-    pub should_redraw: bool, // Boolean indicating Display Buffer update
+    stack: Vec<usize>,         // Function Stack
+    dt: Clock,                 // Delay Timer
+    st: Clock,                 // Sound Timer
+    clock: Clock,              // CPU Clock
+    regs: Registers,           // Registers
+    ram: RAM,                  // RAM
+    keypad: Keypad,            // Keypad
+    frame_buffer: FrameBuffer, // Frame Buffer
+    op: OpCodes,               // Operation Code,
+    pub should_redraw: bool,   // Boolean indicating Display Buffer update
 }
 
 impl CPU {
@@ -35,7 +35,7 @@ impl CPU {
             regs: Registers::new(),
             ram: ram,
             keypad: Keypad::new(),
-            db: DisplayBuffer::new(10),
+            frame_buffer: FrameBuffer::new(),
             op: OpCodes::new(0000),
             should_redraw: false,
         }
@@ -211,17 +211,13 @@ impl CPU {
         self.ram.load_rom(rom);
     }
 
-    pub fn get_display_scale(&self) -> u32 {
-        self.db.scale
-    }
-
-    pub fn get_display_buffer(&self) -> [[bool; DISPLAY_HEIGHT]; DISPLAY_WIDTH] {
-        self.db.db
+    pub fn get_frame_buffer(&self) -> [u8; WIDTH * HEIGHT * PITCH_BYTES] {
+        self.frame_buffer.frame_buffer
     }
 }
 
 fn op_00e0(cpu: &mut CPU) {
-    cpu.db.clear();
+    cpu.frame_buffer.clear();
 }
 
 fn op_1nnn(cpu: &mut CPU) {
@@ -349,26 +345,27 @@ fn op_cxnn(cpu: &mut CPU) {
 fn op_dxyn(cpu: &mut CPU) {
     let mut vf: bool = false;
     let value = cpu.op.n as usize;
-    let ori_x = cpu.regs.get(cpu.op.x) as usize % DISPLAY_WIDTH;
-    let ori_y = cpu.regs.get(cpu.op.y) as usize % DISPLAY_HEIGHT;
+    let ori_x = cpu.regs.get(cpu.op.x) as usize % WIDTH;
+    let ori_y = cpu.regs.get(cpu.op.y) as usize % HEIGHT;
 
     for row in 0..value {
         let y = ori_y + row;
-        if y >= DISPLAY_HEIGHT {
+        if y >= HEIGHT {
             break;
         }
 
         let sprite = cpu.ram.read8(cpu.regs.i + row);
         for pixel_position in 0..8 {
             let x = ori_x + pixel_position;
-            if x >= DISPLAY_WIDTH {
+            if x >= WIDTH {
                 break;
             }
 
             let memory_pixel: bool = (sprite & (1 << (7 - pixel_position))) > 0;
-            let display_pixel: bool = cpu.db.db[x][y];
-            cpu.db.db[x][y] = memory_pixel ^ display_pixel;
-            vf = (memory_pixel && display_pixel) || vf;
+            let frame_pixel: bool = cpu.frame_buffer.toggle_buffer[x][y];
+            cpu.frame_buffer.toggle_buffer[x][y] = memory_pixel ^ frame_pixel;
+            cpu.frame_buffer.update_frame_buffer(x, y);
+            vf = (memory_pixel && frame_pixel) || vf;
         }
     }
     cpu.regs.set(0xF, if vf { 1 } else { 0 });
