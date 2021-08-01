@@ -345,8 +345,8 @@ fn op_cxnn(cpu: &mut CPU) {
 fn op_dxyn(cpu: &mut CPU) {
     let mut vf: bool = false;
     let value = cpu.op.n as usize;
-    let ori_x = cpu.regs.get(cpu.op.x) as usize % WIDTH;
-    let ori_y = cpu.regs.get(cpu.op.y) as usize % HEIGHT;
+    let ori_x = cpu.regs.get(cpu.op.x) as usize & (WIDTH - 1); //% WIDTH;
+    let ori_y = cpu.regs.get(cpu.op.y) as usize & (HEIGHT -1); //% HEIGHT;
 
     for row in 0..value {
         let y = ori_y + row;
